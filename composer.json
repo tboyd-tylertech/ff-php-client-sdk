@@ -1,0 +1,30 @@
+{
+    "name": "harness/ff-server-sdk",
+    "description": "PHP Server SDK for integrating with Harness Feature Flag service.",
+    "keywords":[
+        "harness",
+        "harness featureflags",
+        "harness ff",
+        "harness php"
+    ],
+    "homepage": "https://github.com/harness/ff-php-server-sdk",
+    "type": "library",
+    "license": "Apache-2.0",
+    "autoload": {
+        "psr-4": {
+            "Harness\\": "src/Harness/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Bryan Jen",
+            "email": "bryan.jen@harness.io"
+        },
+        {
+            "name": "Enver Bisevac",
+            "email": "enver.bisevac@harness.io"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {}
+}
