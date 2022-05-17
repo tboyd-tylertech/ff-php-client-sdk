@@ -2,7 +2,6 @@
 
 namespace Harness;
 
-class CFClient
-{
+class CFClient {
 
 }
