@@ -1,0 +1,50 @@
+version: '3'
+
+services:
+  php:
+    image: php:7.4-fpm
+    container_name: app
+    restart: unless-stopped
+    tty: true
+    working_dir: /var/www
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./:/var/www:ro
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - app-network
+  composer:
+    image: composer
+    volumes:
+      - ./:/app/
+    command: install
+
+  webserver:
+    image: nginx:alpine
+    container_name: webserver
+    tty: true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+     - ./:/var/www:ro
+     - ./nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - app-network
+
+  ff-proxy:
+    image: "harness/ff-proxy:latest"
+    container_name: ff-proxy
+    environment:
+      - DEBUG=false
+      - OFFLINE=true
+      - BYPASS_AUTH=false
+      - AUTH_SECRET=foobar
+    ports:
+      - "7000:7000"
+    networks:
+      - app-network
+networks:
+  app-network:
+    driver: bridge
