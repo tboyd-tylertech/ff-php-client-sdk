@@ -18,7 +18,7 @@ services:
     image: composer
     volumes:
       - ./:/app/
-    command: install
+    command: update && install
 
   webserver:
     image: nginx:alpine
