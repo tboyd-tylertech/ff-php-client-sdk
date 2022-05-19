@@ -26,7 +26,14 @@
         }
     ],
     "minimum-stability": "stable",
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/harness/ff-php-client-api.git"
+        }
+    ],
     "require": {
-        "php": ">=7.4"
+        "php": ">=7.4",
+        "harness/ff-php-client-api": "*@dev"
     }
 }
