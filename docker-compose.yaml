@@ -7,6 +7,9 @@ services:
     restart: unless-stopped
     tty: true
     working_dir: /var/www
+    environment:
+      - PROXY_BASE_URL=http://ff-proxy:7000
+      - PROXY_EVENTS_URL=http://ff-proxy:7000
     ports:
       - "9000:9000"
     volumes:
@@ -36,13 +39,15 @@ services:
   ff-proxy:
     image: "harness/ff-proxy:latest"
     container_name: ff-proxy
+    volumes:
+      - ./config:/config
     environment:
       - DEBUG=false
       - OFFLINE=true
       - BYPASS_AUTH=false
       - AUTH_SECRET=foobar
     ports:
-      - "7000:7000"
+      - "7001:7000"
     networks:
       - app-network
 networks:
