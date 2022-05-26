@@ -47,7 +47,7 @@ services:
       - BYPASS_AUTH=false
       - AUTH_SECRET=foobar
     ports:
-      - "7000:7000"
+      - "7001:7000"
     networks:
       - app-network
 networks:

@@ -17,22 +17,14 @@ class CFClient
     /** @var string */
     const VERSION = '1.0.0';
 
-    /** @var string */
-    protected $_sdkKey;
-    /** @var string */
-    protected $_baseUrl;
-    /** @var string */
-    protected $_eventsUrl;
-    /** @var ClientApi */
-    protected $_apiInstance;
+    protected string $_sdkKey;
+    protected string $_baseUrl;
+    protected string $_eventsUrl;
+    protected ClientApi $_apiInstance;
+    protected string $_environment;
+    protected string $_cluster;
 
-    /** @var string */
-    protected $_environment;
-
-    /** @var string */
-    protected $_cluster;
-
-    protected $_configuration;
+    protected Configuration $_configuration;
 
     public function __construct(string $sdkKey, array $options = [])
     {
@@ -60,16 +52,18 @@ class CFClient
         }
     }
 
-    public function authenticate()
+    protected function authenticate()
     {
-        $request = new AuthenticationRequest(array("api_key" => $this->_sdkKey));
+        $request = new AuthenticationRequest(["api_key" => $this->_sdkKey]);
         $response = $this->_apiInstance->authenticate($request);
         $jwtToken = $response->getAuthToken();
         $parts = explode('.', $jwtToken);
         $decoded = base64_decode($parts[1]);
-        $payload = json_decode($decoded, true);
-        $this->_environment = $payload["environment"];
-        $this->_cluster = $payload["clusterIdentifier"];
+        $payload = json_decode($decoded);
+        $this->_environment = $payload->environment;
+        if (array_key_exists('clusterIdentifier', $payload)) {
+            $this->_cluster = $payload->clusterIdentifier;
+        }
         $this->_configuration->setAccessToken($jwtToken);
     }
 
