@@ -16,6 +16,7 @@ use Psr\Log\LogLevel;
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\Filesystem;
 use Cache\Adapter\Filesystem\FilesystemCachePool;
+use OpenAPI\Client\Model\Evaluation;
 
 class CFClient
 {
@@ -38,9 +39,12 @@ class CFClient
     protected $_logger;
     protected $_cache;
 
-    public function __construct(string $sdkKey, array $options = [])
+    protected Target $_target;
+
+    public function __construct(string $sdkKey, Target $target, array $options = [])
     {
         $this->_sdkKey = $sdkKey;
+        $this->_target = $target;
         if (!isset($options['base_url'])) {
             $this->_baseUrl = $_ENV["PROXY_BASE_URL"] ?: self::DEFAULT_BASE_URL;
         } else {
@@ -74,7 +78,7 @@ class CFClient
         $this->_configuration->setHost($this->_baseUrl);
         $this->_apiInstance = new ClientApi(new Client(), $this->_configuration);
 
-        $item = $this->_cache->getItem("cf_data");
+        $item = $this->_cache->getItem("cf_data__{$target->getIdentifier()}");
         $cfData = $item->get();
         if (isset($cfData)) {
             $this->_logger->info("CF data loaded from the cache");
@@ -94,7 +98,7 @@ class CFClient
     protected function authenticate($item)
     {
         try {
-            $request = new AuthenticationRequest(array("api_key" => $this->_sdkKey));
+            $request = new AuthenticationRequest(["api_key" => $this->_sdkKey]);
             $response = $this->_apiInstance->authenticate($request);
             $jwtToken = $response->getAuthToken();
             $parts = explode('.', $jwtToken);
@@ -109,6 +113,10 @@ class CFClient
             if (array_key_exists('clusterIdentifier', $payload)) {
                 $this->_cluster = $payload->clusterIdentifier;
             }
+            if (!isset($this->_environment)) {
+                $this->_logger->error("environment UUID not found in JWT claims");
+                return;
+            }
             $this->_configuration->setAccessToken($jwtToken);
             $this->_logger->info("successfully authenticated");
             $item->set(array("JWT" => $jwtToken, "environment" => $this->_environment, "clusterIdentifier" => $this->_cluster));
@@ -122,29 +130,61 @@ class CFClient
 
     public function fetchEvaluations()
     {
-        // TBD
-        $response = $this->_apiInstance->getFeatureConfig($this->_environment);
-        foreach ($response as $key => $value) {
-            echo "Key: $key; Value: $value\n";
+        try {
+            $result = $this->_apiInstance->getEvaluations($this->_environment, $this->_target->getIdentifier(), $this->_cluster);
+            foreach ($result as $evaluation) {
+                $item = $this->_cache->getItem("evaluations__{$evaluation->getIdentifier()}__{$this->_target->getIdentifier()}");
+                $item->set($this->convertValue($evaluation));
+                $item->expiresAfter(60);
+                $this->_cache->save($item);
+            }
+        } catch (ApiException $e) {
+            $this->_logger->error('Exception when calling ClientApi->getEvaluations: {$e->getMessage()}');
+        } catch (Exception $e) {
+            $this->_logger->error("Caught $e");
         }
     }
 
-    public function evaluate(string $identifier, Target $target, $defaultValue) {
-        $item = $this->_cache->getItem("evaluations__$identifier");
+    public function evaluate(string $identifier, $defaultValue) {
+        $item = $this->_cache->getItem("evaluations__{$identifier}__{$this->_target->getIdentifier()}");
         if ($value = $item->get()) {
             $this->_logger->debug("Loading {$identifier} from cache with value {$value}");
             return $value;
         }
         try {
-            $response = $this->_apiInstance->getEvaluationByIdentifier($this->_environment, $identifier, $target->getIdentifier());
-            $item->set($response["value"]);
+            $response = $this->_apiInstance->getEvaluationByIdentifier($this->_environment, $identifier, $this->_target->getIdentifier(), $this->_cluster);
+            $value = $this->convertValue($response);
+            $item->set($value);
             $item->expiresAfter(60);
             $this->_cache->save($item);
             $this->_logger->debug("Put {$identifier} in the cache");
-            return $response["value"];
+            return $value;
         } catch (ApiException $e) {
             $this->_logger->error("Caught $e");
             return $defaultValue;
         }
+    }
+
+    protected function convertValue(Evaluation $evaluation) {
+        $value = $evaluation->getValue();
+        try {
+            switch ($evaluation->getKind()) {
+                case "int":
+                    $value = (int)$value;
+                case "number":
+                    $value = (float)$value;
+                    break;
+                case "boolean":
+                    $value === "true";
+                    break;
+                case "json":
+                    $value = json_decode($value, true);
+                    break;
+            }
+        } catch (Exception $e) {
+            $this->_logger->error("Caught $e");
+        }
+
+        return $value;
     }
 }
