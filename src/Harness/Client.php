@@ -10,34 +10,45 @@ use OpenAPI\Client\Configuration;
 use OpenAPI\Client\Model\AuthenticationRequest;
 use OpenAPI\Client\ApiException;
 use OpenAPI\Client\Model\Target;
-use GuzzleHttp\Client;
+use GuzzleHttp\Client as HttpClient;
 use Psr\Log\LogLevel;
+use GuzzleHttp\HandlerStack;
+use GuzzleLogMiddleware\LogMiddleware;
 
 use League\Flysystem\Adapter\Local;
 use League\Flysystem\Filesystem;
 use Cache\Adapter\Filesystem\FilesystemCachePool;
+use OpenAPI\Client\Api\MetricsApi;
 use OpenAPI\Client\Model\Evaluation;
+use OpenAPI\Client\Model\KeyValue;
+use OpenAPI\Client\Model\Metrics;
+use OpenAPI\Client\Model\MetricsData;
 
-class CFClient
+const METRICS_KEY = "metrics";
+
+class Client
 {
     /** @var string */
     const DEFAULT_BASE_URL = 'http://ff-proxy:7000';
     /** @var string */
     const DEFAULT_EVENTS_URL = 'http://ff-proxy:7000';
     /** @var string */
-    const VERSION = '1.0.0';
+    const VERSION = '0.0.1';
 
     protected string $_sdkKey;
     protected string $_baseUrl;
     protected string $_eventsUrl;
     protected ClientApi $_apiInstance;
+    protected MetricsApi $_metricsApi;
     protected string $_environment;
-    protected string $_cluster;
+    protected int $_cluster = 1;
 
-    protected Configuration $_configuration;
+    protected Configuration $_baseConf;
+    protected Configuration $_metricsConf;
 
     protected $_logger;
     protected $_cache;
+    protected bool $_metricsEnabled = true;
 
     protected Target $_target;
 
@@ -58,7 +69,7 @@ class CFClient
         }
 
         if (!isset($options['logger'])) {
-            $this->_logger = new Logger('CfClient');
+            $this->_logger = new Logger('FFClient');
             $this->_logger->pushHandler(new StreamHandler('php://stderr', LogLevel::DEBUG));
         } else {
             $this->_logger = $options['logger'];
@@ -73,32 +84,42 @@ class CFClient
             $this->_cache = $options['cache'];
         }
 
-
-        $this->_configuration = new Configuration();
-        $this->_configuration->setHost($this->_baseUrl);
-        $this->_apiInstance = new ClientApi(new Client(), $this->_configuration);
-
-        $item = $this->_cache->getItem("cf_data__{$target->getIdentifier()}");
-        $cfData = $item->get();
-        if (isset($cfData)) {
-            $this->_logger->info("CF data loaded from the cache");
-            $this->_environment = $cfData["environment"];
-            $this->_cluster = $cfData["clusterIdentifier"];
-            $this->_configuration->setAccessToken($cfData["JWT"]);
-        } else {
-            $this->_logger->info("CF data not found in cache, authenticating...");
-            $this->authenticate($item);
+        if (isset($options['metricsEnabled'])) {
+            $this->_metricsEnabled = $options['metricsEnabled'];
         }
 
-        if (isset($this->_environment)) {
-            $this->fetchEvaluations();
+
+        $this->_baseConf = new Configuration();
+        $this->_baseConf->setHost($this->_baseUrl);
+        $stack = HandlerStack::create();
+        $logMiddleware = new LogMiddleware($this->_logger);
+        $stack->push($logMiddleware);
+        $client = new HttpClient([
+            'handler' => $stack,
+        ]);
+        $this->_apiInstance = new ClientApi($client, $this->_baseConf);
+        $this->_metricsConf = new Configuration();
+        $this->_metricsConf->setHost($this->_eventsUrl);
+        $this->_metricsApi = new MetricsApi($client, $this->_metricsConf);
+
+        $item = $this->_cache->getItem("auth__{$target->getIdentifier()}");
+        $data = $item->get();
+        if (isset($data)) {
+            $this->_logger->info("CF data loaded from the cache");
+            $this->_environment = $data["environment"];
+            $this->_cluster = $data["clusterIdentifier"];
+            $this->_baseConf->setAccessToken($data["JWT"]);
+            $this->_metricsConf->setAccessToken($data["JWT"]);
+        } else {
+            $this->_logger->info("Authentication token not found in cache, authenticating...");
+            $this->authenticate($item);
         }
     }
 
     protected function authenticate($item)
     {
         try {
-            $request = new AuthenticationRequest(["api_key" => $this->_sdkKey]);
+            $request = new AuthenticationRequest(["api_key" => $this->_sdkKey, "target" => $this->_target]);
             $response = $this->_apiInstance->authenticate($request);
             $jwtToken = $response->getAuthToken();
             $parts = explode('.', $jwtToken);
@@ -109,15 +130,15 @@ class CFClient
             $decoded = base64_decode($parts[1]);
             $payload = json_decode($decoded, true);
             $this->_environment = $payload['environment'];
-            $this->_cluster = "1";
             if (array_key_exists('clusterIdentifier', $payload)) {
-                $this->_cluster = $payload->clusterIdentifier;
+                $this->_cluster = $payload["clusterIdentifier"];
             }
             if (!isset($this->_environment)) {
                 $this->_logger->error("environment UUID not found in JWT claims");
                 return;
             }
-            $this->_configuration->setAccessToken($jwtToken);
+            $this->_baseConf->setAccessToken($jwtToken);
+            $this->_metricsConf->setAccessToken($jwtToken);
             $this->_logger->info("successfully authenticated");
             $item->set(array("JWT" => $jwtToken, "environment" => $this->_environment, "clusterIdentifier" => $this->_cluster));
             $this->_cache->save($item);
@@ -137,6 +158,7 @@ class CFClient
                 $item->set($this->convertValue($evaluation));
                 $item->expiresAfter(60);
                 $this->_cache->save($item);
+                $this->pushToMetricsCache($evaluation);
             }
         } catch (ApiException $e) {
             $this->_logger->error('Exception when calling ClientApi->getEvaluations: {$e->getMessage()}');
@@ -146,6 +168,9 @@ class CFClient
     }
 
     public function evaluate(string $identifier, $defaultValue) {
+        if (!isset($this->_environment)) {
+            return $defaultValue;
+        }
         $item = $this->_cache->getItem("evaluations__{$identifier}__{$this->_target->getIdentifier()}");
         if ($value = $item->get()) {
             $this->_logger->debug("Loading {$identifier} from cache with value {$value}");
@@ -158,11 +183,68 @@ class CFClient
             $item->expiresAfter(60);
             $this->_cache->save($item);
             $this->_logger->debug("Put {$identifier} in the cache");
+            $this->pushToMetricsCache($response);
             return $value;
         } catch (ApiException $e) {
             $this->_logger->error("Caught $e");
             return $defaultValue;
         }
+    }
+
+    public function sendMetrics() {
+        try {
+            $item = $this->_cache->getItem(METRICS_KEY);
+            $entries = $item->get();
+            if (!isset($entries)) {
+                $this->_logger->info("No metrics data");
+                return;
+            }
+            $metricsData = [];
+            /* @var $entry MetricItem */
+            foreach ($entries as $entry) {
+                $data = new MetricsData();
+                $milliseconds = floor(microtime(true) * 1000);
+                $data->setTimestamp($milliseconds);
+                $data->setCount($entry->count);
+                $data->setMetricsType("FFMETRICS");
+                $data->setAttributes([
+                    new KeyValue(["key" => "featureIdentifier", "value" => $entry->featureIdentifier]),
+                    new KeyValue(["key" => "featureName", "value" => $entry->featureIdentifier]),
+                    new KeyValue(["key" => "variationIdentifier", "value" => $entry->variationIdentifier]),
+                    new KeyValue(["key" => "target", "value" => $entry->targetIdentifier]),
+                    new KeyValue(["key" => "SDK_NAME", "value" => "PHP"]),
+                    new KeyValue(["key" => "SDK_LANGUAGE", "value" => "PHP"]),
+                    new KeyValue(["key" => "SDK_TYPE", "value" => "Server"]),
+                    new KeyValue(["key" => "SDK_VERSION", "value" => Client::VERSION]),
+                ]);
+                $metricsData[] = $data;
+            }
+            $metrics = new Metrics();
+            $metrics->setMetricsData($metricsData);
+            $this->_metricsApi->postMetrics($this->_environment, $this->_cluster, $metrics);
+            $this->_cache->deleteItem(METRICS_KEY);
+        } catch (ApiException $e) {
+                $this->_logger->error("Exception when calling MetricsApi->postMetrics {$e->getMessage()}", $e);
+        } catch (Exception $e) {
+            $this->_logger->error("Caught $e in MetricsApi->postMetrics", $e);
+        }
+    }
+
+    protected function pushToMetricsCache(Evaluation $evaluation) {
+        if (!$this->_metricsEnabled) {
+            return;
+        }
+        $item = $this->_cache->getItem(METRICS_KEY);
+        $queue = $item->get();
+        if (!isset($queue)) {
+           $queue = [];
+        }
+        $queue[] = new MetricItem(
+            $evaluation->getFlag(), $evaluation->getValue(), $evaluation->getIdentifier(), 1, time(),
+            $this->_target->getIdentifier()
+        );
+        $item->set($queue);
+        $this->_cache->save($item);
     }
 
     protected function convertValue(Evaluation $evaluation) {
