@@ -15,7 +15,6 @@ make start-offline
 when you don't need development environment just type:
 ```shell
 make stop
-```
 
 ## OpenAPI generator instructions
 
