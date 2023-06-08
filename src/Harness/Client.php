@@ -45,6 +45,9 @@ class Client
     protected ClientApi $_apiInstance;
     protected MetricsApi $_metricsApi;
     protected string $_environment;
+    protected string $_environmentIdentifier;
+    protected string $_accountID;
+    protected string $_sdkInfo;
     protected int $_cluster = 1;
 
     protected Configuration $_baseConf;
@@ -117,6 +120,9 @@ class Client
         if (isset($data)) {
             $this->_logger->info("CF data loaded from the cache");
             $this->_environment = $data["environment"];
+            $this->_environmentIdentifier = $data["environmentIdentifier"];
+            $this->_sdkInfo = Client::VERSION;
+            $this->_accountID = $data["accountID"];
             $this->_cluster = $data["clusterIdentifier"];
             $this->_baseConf->setAccessToken($data["JWT"]);
             $this->_metricsConf->setAccessToken($data["JWT"]);
@@ -154,10 +160,17 @@ class Client
             if (array_key_exists('clusterIdentifier', $payload)) {
                 $this->_cluster = $payload["clusterIdentifier"];
             }
+            if (array_key_exists('environmentIdentifier', $payload)) {
+                $this->_environmentIdentifier = $payload["environmentIdentifier"];
+            }
+            if (array_key_exists('accountID', $payload)) {
+                $this->_accountID = $payload["accountID"];
+            }
             if (!isset($this->_environment)) {
                 $this->_logger->error("environment UUID not found in JWT claims");
                 return;
             }
+            $this->_sdkInfo = Client::VERSION;
             $this->_baseConf->setAccessToken($jwtToken);
             $this->_metricsConf->setAccessToken($jwtToken);
             $this->_logger->info("successfully authenticated");
