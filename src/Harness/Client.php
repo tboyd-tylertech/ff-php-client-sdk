@@ -33,11 +33,11 @@ const SEPARATOR = "__";
 class Client
 {
     /** @var string */
-    const DEFAULT_BASE_URL = 'http://ff-proxy:7000';
+    const DEFAULT_BASE_URL = 'https://config.ff.harness.io/api/1.0';
     /** @var string */
-    const DEFAULT_EVENTS_URL = 'http://ff-proxy:7000';
+    const DEFAULT_EVENTS_URL = 'https://events.ff.harness.io/api/1.0';
     /** @var string */
-    const VERSION = '0.0.1';
+    const VERSION = '0.2.0';
 
     protected string $_sdkKey;
     protected string $_baseUrl;
@@ -85,9 +85,14 @@ class Client
             $this->_logger = $options['logger'];
         }
 
+        $this->_logger->info("SDK version " . Client::VERSION);
+
         if (!isset($options['cache'])) {
-            $filesystemAdapter = new Local(sys_get_temp_dir());
+            $tempdir           = sys_get_temp_dir();
+            $filesystemAdapter = new Local($tempdir);
             $filesystem        = new Filesystem($filesystemAdapter);
+
+            $this->_logger->info("Cache location: " . $tempdir);
 
             $this->_cache = new FilesystemCachePool($filesystem);
         } else {
@@ -174,7 +179,11 @@ class Client
             $this->_baseConf->setAccessToken($jwtToken);
             $this->_metricsConf->setAccessToken($jwtToken);
             $this->_logger->info("successfully authenticated");
-            $item->set(array("JWT" => $jwtToken, "environment" => $this->_environment, "clusterIdentifier" => $this->_cluster));
+            $item->set(array("JWT" => $jwtToken,
+                "environment" => $this->_environment,
+                "clusterIdentifier" => $this->_cluster,
+                "accountID" => $this->_accountID,
+                "environmentIdentifier" => $this->_environmentIdentifier));
             $this->_cache->save($item);
         } catch (ApiException $e) {
             $this->_logger->error("Error while authenticating {$e->getMessage()}");
