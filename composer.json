@@ -37,7 +37,7 @@
         "harness/ff-php-client-api": "*@dev",
         "cache/filesystem-adapter": "^1.2",
         "monolog/monolog": "^3.0",
-        "psr/log": "^1.1.4",
+        "psr/log": "^3.0.2",
         "psr/cache": "^1.0.1",
         "symfony/deprecation-contracts": "^2.2",
         "gmponos/guzzle_logger": "^2.2"
