@@ -38,7 +38,7 @@
         "cache/filesystem-adapter": "^1.2",
         "monolog/monolog": "^3.0",
         "psr/log": "^3.0.2",
-        "psr/cache": "^1.0.1",
+        "psr/cache": "^3.0.0",
         "symfony/deprecation-contracts": "^2.2",
         "gmponos/guzzle_logger": "^2.2"
     },
