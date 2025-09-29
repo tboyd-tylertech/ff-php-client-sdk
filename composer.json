@@ -1,5 +1,5 @@
 {
-    "name": "harness/ff-server-sdk",
+    "name": "tboyd-tylertech/ff-server-sdk",
     "description": "PHP Server SDK for integrating with Harness Feature Flag service.",
     "keywords":[
         "harness",
@@ -7,7 +7,7 @@
         "harness ff",
         "harness php"
     ],
-    "homepage": "https://github.com/harness/ff-php-server-sdk",
+    "homepage": "https://github.com/tboyd-tylertech/ff-php-server-sdk",
     "type": "library",
     "license": "Apache-2.0",
     "autoload": {
@@ -29,17 +29,17 @@
     "repositories": [
         {
             "type": "vcs",
-            "url": "https://github.com/harness/ff-php-client-api.git"
+            "url": "https://github.com/tboyd-tylertech/ff-php-client-api.git"
         }
     ],
     "require": {
-        "php": ">=7.4",
+        "php": ">=8.2",
         "harness/ff-php-client-api": "*@dev",
         "cache/filesystem-adapter": "^1.2",
-        "monolog/monolog": "2.6.0",
-        "psr/log": "1.1.4",
-        "psr/cache": "1.0.1",
-        "symfony/deprecation-contracts": "2.2",
+        "monolog/monolog": "^2.6.0",
+        "psr/log": "^1.1.4",
+        "psr/cache": "^1.0.1",
+        "symfony/deprecation-contracts": "^2.2",
         "gmponos/guzzle_logger": "^2.2"
     },
     "require-dev": {
