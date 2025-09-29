@@ -35,7 +35,7 @@
     "require": {
         "php": ">=8.2",
         "harness/ff-php-client-api": "*@dev",
-        "cache/filesystem-adapter": "^1.2",
+        "cache/filesystem-adapter": "^3.0",
         "monolog/monolog": "^3.0",
         "psr/log": "^3.0.2",
         "psr/cache": "^3.0.0",
