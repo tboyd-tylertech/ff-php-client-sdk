@@ -6,6 +6,7 @@ api
 .vscode/configurationCache.log
 .vscode/dryrun.log
 
+/.idea/
 .online.env
 .php.env
 .phpunit.result.cache
